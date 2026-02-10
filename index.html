@@ -8,16 +8,17 @@
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
     <script>
-      // Component to handle video playback when target is found/lost
       AFRAME.registerComponent('video-controller', {
         init: function () {
           const video = document.querySelector("#my-video");
           
+          // Play video when target is found
           this.el.addEventListener('targetFound', event => {
             console.log("Target Found");
             video.play();
           });
 
+          // Pause video when target is lost
           this.el.addEventListener('targetLost', event => {
             console.log("Target Lost");
             video.pause();
@@ -38,7 +39,6 @@
       <a-assets>
         <video id="my-video" 
                src="./my-video.webm" 
-               type="video/webm"
                preload="auto" 
                loop="true" 
                playsinline 
