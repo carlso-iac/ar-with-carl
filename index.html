@@ -6,23 +6,14 @@
     
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.0.0/dist/aframe-extras.min.js"></script>
     
     <script>
       AFRAME.registerComponent('video-controller', {
         init: function () {
           const video = document.querySelector("#my-video");
-          
-          // Play video when target is found
-          this.el.addEventListener('targetFound', event => {
-            console.log("Target Found");
-            video.play();
-          });
-
-          // Pause video when target is lost
-          this.el.addEventListener('targetLost', event => {
-            console.log("Target Lost");
-            video.pause();
-          });
+          this.el.addEventListener('targetFound', event => { video.play(); });
+          this.el.addEventListener('targetLost', event => { video.pause(); });
         }
       });
     </script>
@@ -37,31 +28,32 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <video id="my-video" 
-               src="./my-video.webm" 
-               preload="auto" 
-               loop="true" 
-               playsinline 
-               webkit-playsinline 
-               muted 
-               crossorigin="anonymous">
-        </video>
+        <video id="my-video" src="./my-video.webm" preload="auto" loop="true" playsinline webkit-playsinline muted crossorigin="anonymous"></video>
+        
+        <a-asset-item id="my-model" src="./model.glb"></a-asset-item>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <a-entity mindar-image-target="targetIndex: 0" video-controller>
-        
         <a-video 
           src="#my-video" 
-          width="1" 
-          height="1" 
+          width="1" height="1" 
           position="0 0 0" 
-          rotation="0 0 0"
           material="shader: flat; transparent: true; alphaTest: 0.5">
         </a-video>
-        
       </a-entity>
+
+      <a-entity mindar-image-target="targetIndex: 1">
+        <a-entity 
+          gltf-model="#my-model" 
+          rotation="0 0 0" 
+          position="0 0 0" 
+          scale="0.5 0.5 0.5"
+          animation-mixer>
+        </a-entity>
+      </a-entity>
+
     </a-scene>
   </body>
 </html>
