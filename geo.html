@@ -2,63 +2,92 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>GeoAR Fixed</title>
+    <title>Proximity Spawn AR</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   </head>
 
   <body style="margin: 0; overflow: hidden;">
-    <div style="position: fixed; top: 10px; width:100%; text-align: center; z-index: 10; color: white; background: rgba(0,0,0,0.7); padding: 10px; font-family: sans-serif;">
-        <div id="status">Acquiring GPS...</div>
-        <button onclick="forceHere()" style="margin-top: 5px; padding: 8px;">📍 DROP AT MY FEET</button>
+    <div id="ui" style="position: fixed; top: 10px; width:100%; text-align: center; z-index: 10; color: white; background: rgba(0,0,0,0.7); padding: 10px; font-family: sans-serif;">
+        <div id="status">Checking distance...</div>
     </div>
 
     <a-scene
-      vr-mode-ui="enabled: false"
       embedded
-      arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;">
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+      vr-mode-ui="enabled: false">
       
       <a-assets>
         <a-asset-item id="myModel" src="model.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera gps-camera="minDistance: 1; maxDistance: 50;" rotation-reader></a-camera>
+      <a-camera id="cam" rotation-reader></a-camera>
 
-      <a-light type="ambient" intensity="0.7"></a-light>
-      <a-light type="directional" intensity="1.2" position="-1 4 2"></a-light>
-
-      <a-entity id="anchor" gps-entity-place="latitude: 14.559854595191974; longitude: 121.00783436415189;">
-          <a-box material="color: red; opacity: 0.6;" scale="0.5 0.5 0.5" position="0 0 0"></a-box>
-          
-          <a-entity 
-            gltf-model="#myModel" 
-            scale="3 3 3" 
-            position="0 0 0"
-            animation-mixer>
-          </a-entity>
+      <a-entity id="ar-model" 
+                gltf-model="#myModel" 
+                scale="1 1 1" 
+                visible="false">
       </a-entity>
 
+      <a-light type="ambient" intensity="1"></a-light>
     </a-scene>
 
     <script>
+      // Target coordinates (The "Center" of your 10-25m zone)
+      const targetLat = 14.5598;
+      const targetLon = 121.0078;
+      
+      let hasSpawned = false;
+      const model = document.querySelector('#ar-model');
       const status = document.querySelector('#status');
-      const anchor = document.querySelector('#anchor');
 
-      // Listen for GPS updates to show accuracy
-      window.addEventListener('gps-camera-update-position', (e) => {
-        const acc = e.detail.position.accuracy;
-        status.innerHTML = `GPS Accuracy: ${acc.toFixed(1)}m<br><small style="color: ${acc > 20 ? 'red' : 'lime'}">${acc > 20 ? 'Poor Signal' : 'Good Signal'}</small>`;
+      // Haversine formula to calculate distance in meters
+      function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371e3; // Earth radius in meters
+        const φ1 = lat1 * Math.PI/180;
+        const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1) * Math.PI/180;
+        const Δλ = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      }
+
+      window.addEventListener('deviceorientation', () => {
+        navigator.geolocation.watchPosition((pos) => {
+          const dist = getDistance(pos.coords.latitude, pos.coords.longitude, targetLat, targetLon);
+          
+          if (!hasSpawned) {
+             status.innerText = `Distance to zone: ${dist.toFixed(1)}m`;
+             
+             // Check if user is within 10-25 meters
+             if (dist <= 25 && dist >= 10) {
+               spawnModelInFront();
+             }
+          }
+        }, null, { enableHighAccuracy: true });
       });
 
-      function forceHere() {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          anchor.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
-          status.innerText = "Model dropped at your feet!";
-        }, (err) => {
-          alert("Error getting GPS: " + err.message);
-        }, { enableHighAccuracy: true });
+      function spawnModelInFront() {
+        const camera = document.querySelector('#cam').object3D;
+        const modelObj = model.object3D;
+
+        // 1. Get the direction the camera is facing
+        var direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+
+        // 2. Position the model 2 meters in front of the camera
+        // Direction is usually negative Z in A-Frame
+        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-2));
+        
+        // 3. Keep it on the ground (optional: matches camera Y height or set to 0)
+        modelObj.position.y = -1.6; // Assuming eye level is 1.6m
+
+        model.setAttribute('visible', 'true');
+        hasSpawned = true;
+        status.innerText = "Target Reached! Model Spawned.";
+        status.style.background = "rgba(0, 255, 0, 0.5)";
       }
     </script>
   </body>
