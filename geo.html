@@ -2,34 +2,16 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <title>GeoAR.js Debug Mode</title>
+    <title>GeoAR Troubleshooting</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
-    
     <style>
-      #debug-ui {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 10;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 15px;
-        font-family: sans-serif;
-        border-radius: 10px;
-        text-align: center;
-      }
+      #debug { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; z-index: 999; font-family: monospace; font-size: 12px; }
     </style>
   </head>
 
   <body style="margin: 0; overflow: hidden;">
-    <div id="debug-ui">
-      Searching for GPS...<br>
-      <span id="distance-text">Waiting for signal...</span>
-    </div>
+    <div id="debug">Initializing GPS...</div>
 
     <a-scene
       vr-mode-ui="enabled: false"
@@ -40,42 +22,38 @@
         <a-asset-item id="myModel" src="model.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera 
-        gps-camera="simulateLatitude: 0; simulateLongitude: 0; minDistance: 1; maxDistance: 1000;" 
-        rotation-reader>
-      </a-camera>
+      <a-light type="ambient" intensity="1"></a-light>
+      <a-light type="directional" position="0 10 0" intensity="0.5"></a-light>
+
+      <a-camera gps-camera rotation-reader></a-camera>
 
       <a-entity
         id="geo-model"
         gltf-model="#myModel"
-        scale="5 5 5" 
-        gps-entity-place="latitude: 14.559854595191974; longitude: 121.00783436415189;"
-        look-at="[gps-camera]"
-        visible="false"
+        scale="50 50 50"
+        gps-entity-place="latitude: 14.559854; longitude: 121.007834;"
       >
       </a-entity>
     </a-scene>
 
     <script>
+      const debug = document.querySelector('#debug');
       const model = document.querySelector('#geo-model');
-      const textDisplay = document.querySelector('#distance-text');
 
-      // Listen for the camera calculating the distance to the model
+      // 1. Check if the model actually loads
+      model.addEventListener('model-loaded', () => {
+        debug.innerHTML += '<br>✅ Model Loaded Successfully';
+      });
+
+      model.addEventListener('model-error', (e) => {
+        debug.innerHTML += '<br>❌ Model Load Failed! Check filename.';
+      });
+
+      // 2. Track Distance
       window.addEventListener('gps-camera-update-position', (e) => {
-        // The distance is automatically calculated by AR.js and stored in the entity
         const dist = model.getAttribute('distance');
-        
-        if (dist !== null) {
-          const roundedDist = Math.round(dist);
-          textDisplay.innerText = `Distance to model: ${roundedDist} meters`;
-
-          // Only show the model if you are within 100 meters
-          // This prevents it from "ghosting" when you're too far away
-          if (roundedDist < 100) {
-            model.setAttribute('visible', 'true');
-          } else {
-            model.setAttribute('visible', 'false');
-          }
+        if (dist) {
+          debug.innerHTML = `Dist: ${Math.round(dist)}m | Acc: ${e.detail.position.accuracy}m`;
         }
       });
     </script>
