@@ -2,29 +2,21 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>GeoAR Final Fix</title>
+    <title>GeoAR Diagnostic</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
-    <style>
-      .controls { position: fixed; bottom: 20px; left: 10px; right: 10px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
-      button { background: #007bff; color: white; border: none; padding: 15px; border-radius: 8px; font-weight: bold; }
-      #info { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; z-index: 1000; }
-    </style>
   </head>
 
   <body style="margin: 0; overflow: hidden;">
-    <div id="info">Dist: -- | Scale: 10</div>
-
-    <div class="controls">
-      <button onclick="snapToMe()">1. BRING TO ME (5m away)</button>
-      <button onclick="increaseScale()">2. MAKE BIGGER</button>
-      <button onclick="rotateModel()">3. SPIN MODEL</button>
+    <div style="position: fixed; top: 10px; width:100%; text-align: center; z-index: 10; color: white; background: rgba(0,0,0,0.5);">
+        <p id="status">Wait for GPS...</p>
+        <button onclick="forceHere()" style="padding: 10px;">FORCE TO MY FEET</button>
     </div>
 
     <a-scene
       vr-mode-ui="enabled: false"
       embedded
-      arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;"
+      arjs="sourceType: webcam; debugUIEnabled: false;"
     >
       <a-assets>
         <a-asset-item id="myModel" src="model.glb"></a-asset-item>
@@ -32,47 +24,34 @@
 
       <a-camera gps-camera rotation-reader></a-camera>
 
-      <a-entity
-        id="geo-entity"
-        gltf-model="#myModel"
-        scale="10 10 10"
-        position="0 0 0"
-        gps-entity-place="latitude: 14.559854; longitude: 121.007834;"
-      >
+      <a-light type="ambient" color="#FFF"></a-light>
+      <a-light type="directional" color="#FFF" intensity="1.5" position="-1 2 1"></a-light>
+
+      <a-entity id="anchor" gps-entity-place="latitude: 14.5598; longitude: 121.0078;">
+          <a-box material="color: red;" scale="2 2 2" position="0 1 0"></a-box>
+          
+          <a-entity 
+            gltf-model="#myModel" 
+            scale="15 15 15" 
+            position="0 1 0">
+          </a-entity>
       </a-entity>
+
     </a-scene>
 
     <script>
-      const model = document.querySelector('#geo-entity');
-      const info = document.querySelector('#info');
-      let currentScale = 10;
-      let currentRotation = 0;
+      const status = document.querySelector('#status');
+      const anchor = document.querySelector('#anchor');
 
-      // Update Distance Info
       window.addEventListener('gps-camera-update-position', (e) => {
-        const d = model.getAttribute('distance');
-        info.innerText = `Dist: ${d ? Math.round(d) : '--'}m | Scale: ${currentScale}`;
+        status.innerText = `Accuracy: ${e.detail.position.accuracy.toFixed(1)}m`;
       });
 
-      function snapToMe() {
+      function forceHere() {
         navigator.geolocation.getCurrentPosition((pos) => {
-          const lat = pos.coords.latitude + 0.00005; // 5 meters North
-          const lng = pos.coords.longitude;
-          model.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
-          // Set at eye level (1.6 meters up)
-          model.setAttribute('position', '0 1.6 0');
-          alert("Model moved 5m North of you at eye-level!");
+          anchor.setAttribute('gps-entity-place', `latitude: ${pos.coords.latitude}; longitude: ${pos.coords.longitude};`);
+          alert("Moved box and model to your current GPS spot!");
         });
-      }
-
-      function increaseScale() {
-        currentScale *= 2;
-        model.setAttribute('scale', `${currentScale} ${currentScale} ${currentScale}`);
-      }
-
-      function rotateModel() {
-        currentRotation += 45;
-        model.setAttribute('rotation', `0 ${currentRotation} 0`);
       }
     </script>
   </body>
