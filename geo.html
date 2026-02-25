@@ -8,7 +8,7 @@
   </head>
 
   <body style="margin: 0; overflow: hidden;">
-    <div id="ui" style="position: fixed; top: 10px; width:100%; text-align: center; z-index: 10; color: white; background: rgba(0,0,0,0.7); padding: 10px; font-family: sans-serif;">
+    <div id="ui" style="position: fixed; top: 10px; left: 0; right: 0; width:100%; text-align: center; z-index: 10; color: white; background: rgba(0,0,0,0.7); padding: 10px; font-family: sans-serif; box-sizing: border-box;">
         <div id="status">Checking distance...</div>
     </div>
 
@@ -86,7 +86,7 @@
 
         // 2. Position the model 5 meters in front of the camera
         // Direction is usually negative Z in A-Frame
-        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-20));
+        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-5));
         
         // 3. Keep it on the ground (optional: matches camera Y height or set to 0)
         modelObj.position.y = -1.6; // Assuming eye level is 1.6m
