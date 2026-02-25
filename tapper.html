@@ -1,149 +1,73 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Surface Spawner</title>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-target-aframe.prod.js"></script>
+
     <style>
-        body { margin: 0; overflow: hidden; background-color: transparent; }
-        #ARButton {
-            background: rgba(0,0,0,0.8) !important;
-            color: white !important;
-            border: 2px solid white !important;
-            bottom: 30px !important;
-        }
+      body { margin: 0; overflow: hidden; }
+      #ui-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5); color: white; z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; font-family: sans-serif;
+      }
     </style>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
+  </head>
+
+  <body>
+    <div id="ui-overlay"><h1>Tap to Start Surface AR</h1></div>
+
+    <a-scene 
+      mindar-target="autoStart: false" 
+      embedded 
+      color-space="sRGB" 
+      renderer="colorManagement: true, exposure: 1" 
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false">
+      
+      <a-assets>
+        <a-asset-item id="my-model" src="./model.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse;" raycaster="objects: .ground"></a-camera>
+
+      <a-entity id="ground" class="ground" geometry="primitive: plane; width: 100; height: 100" rotation="-90 0 0" material="transparent: true; opacity: 0"></a-entity>
+
+      <a-entity light="type: ambient; intensity: 1"></a-entity>
+      <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
+
+      <a-entity id="container"></a-entity>
+    </a-scene>
+
+    <script>
+      const overlay = document.querySelector('#ui-overlay');
+      const sceneEl = document.querySelector('a-scene');
+      const container = document.querySelector('#container');
+
+      // Start the AR engine when user taps the overlay
+      overlay.addEventListener('click', () => {
+        overlay.style.display = 'none';
+        sceneEl.systems['mindar-target'].start(); // Explicitly start MindAR
+      });
+
+      // Spawning Logic
+      sceneEl.addEventListener('click', (event) => {
+        // Find the intersection point on our invisible ground
+        const touchPoint = event.detail.intersection ? event.detail.intersection.point : null;
+        
+        if (touchPoint) {
+          const newEntity = document.createElement('a-entity');
+          newEntity.setAttribute('gltf-model', '#my-model');
+          newEntity.setAttribute('position', touchPoint);
+          newEntity.setAttribute('scale', '0.5 0.5 0.5'); // Adjust scale as needed
+          
+          container.appendChild(newEntity);
         }
+      });
     </script>
-</head>
-<body>
-    <script type="module">
-        import * as THREE from 'three';
-        import { ARButton } from 'three/addons/webxr/ARButton.js';
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-
-        let container, scene, camera, renderer, controller, reticle;
-        let spawnedModel = null;
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
-
-        init();
-        animate();
-
-        function init() {
-            container = document.createElement('div');
-            document.body.appendChild(container);
-
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-            // Light is vital for .glb models
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-            light.position.set(0.5, 1, 0.25);
-            scene.add(light);
-
-            renderer = new THREE.WebGLRenderer({ 
-                antialias: true, 
-                alpha: true,
-                preserveDrawingBuffer: true 
-            });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            container.appendChild(renderer.domElement);
-
-            // Start AR Button with Hit-Test required
-            const arButton = ARButton.createButton(renderer, { 
-                requiredFeatures: ['hit-test'],
-                optionalFeatures: ['dom-overlay'],
-                domOverlay: { root: document.body }
-            });
-            document.body.appendChild(arButton);
-
-            // The Reticle (targeting ring)
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-
-            // Load Model with a fallback
-            const loader = new GLTFLoader();
-            loader.load('model.glb', 
-                (gltf) => {
-                    spawnedModel = gltf.scene;
-                    // Normalize scale in case the model is massive
-                    spawnedModel.scale.set(0.2, 0.2, 0.2); 
-                },
-                undefined,
-                (err) => {
-                    console.error("GLB failed, using fallback cube.");
-                    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-                    const mat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-                    spawnedModel = new THREE.Mesh(geo, mat);
-                }
-            );
-
-            controller = renderer.xr.getController(0);
-            controller.addEventListener('select', onSelect);
-            scene.add(controller);
-
-            window.addEventListener('resize', onWindowResize);
-        }
-
-        function onSelect() {
-            if (reticle.visible && spawnedModel) {
-                const modelClone = spawnedModel.clone();
-                reticle.matrix.decompose(modelClone.position, modelClone.quaternion, modelClone.scale);
-                scene.add(modelClone);
-            }
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            renderer.setAnimationLoop(render);
-        }
-
-        function render(timestamp, frame) {
-            if (frame) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const session = renderer.xr.getSession();
-
-                if (hitTestSourceRequested === false) {
-                    session.requestReferenceSpace('viewer').then((refSpace) => {
-                        session.requestHitTestSource({ space: refSpace }).then((source) => {
-                            hitTestSource = source;
-                        });
-                    });
-                    hitTestSourceRequested = true;
-                }
-
-                if (hitTestSource) {
-                    const hitTestResults = frame.getHitTestResults(hitTestSource);
-                    if (hitTestResults.length > 0) {
-                        const hit = hitTestResults[0];
-                        reticle.visible = true;
-                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                    } else {
-                        reticle.visible = false;
-                    }
-                }
-            }
-            renderer.render(scene, camera);
-        }
-    </script>
-</body>
+  </body>
 </html>
