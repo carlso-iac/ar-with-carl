@@ -33,17 +33,19 @@
     </a-scene>
 
     <script>
-      // Target coordinates (The "Center" of your 10-25m zone)
-      const targetLat = 14.5598;
-      const targetLon = 121.0078;
-      
+      // Target locations — add more objects to this array as needed
+      const targets = [
+        { lat: 14.5598,             lon: 121.0078 },
+        { lat: 14.06339443338349,   lon: 121.1576645524234 }
+      ];
+
       let hasSpawned = false;
       const model = document.querySelector('#ar-model');
       const status = document.querySelector('#status');
 
       // Haversine formula to calculate distance in meters
       function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // Earth radius in meters
+        const R = 6371e3;
         const φ1 = lat1 * Math.PI/180;
         const φ2 = lat2 * Math.PI/180;
         const Δφ = (lat2-lat1) * Math.PI/180;
@@ -56,15 +58,20 @@
 
       window.addEventListener('deviceorientation', () => {
         navigator.geolocation.watchPosition((pos) => {
-          const dist = getDistance(pos.coords.latitude, pos.coords.longitude, targetLat, targetLon);
-          
-          if (!hasSpawned) {
-             status.innerText = `Distance to zone: ${dist.toFixed(1)}m`;
-             
-             // Check if user is within 10-15 meters
-             if (dist <= 15 && dist >= 10) {
-               spawnModelInFront();
-             }
+          if (hasSpawned) return;
+
+          // Find the closest target
+          let closestDist = Infinity;
+          targets.forEach(t => {
+            const dist = getDistance(pos.coords.latitude, pos.coords.longitude, t.lat, t.lon);
+            if (dist < closestDist) closestDist = dist;
+          });
+
+          status.innerText = `Distance to nearest zone: ${closestDist.toFixed(1)}m`;
+
+          // Check if user is within 10-15 meters of any target
+          if (closestDist <= 15 && closestDist >= 10) {
+            spawnModelInFront();
           }
         }, null, { enableHighAccuracy: true });
       });
