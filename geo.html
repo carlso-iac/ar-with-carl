@@ -86,7 +86,7 @@
 
         // 2. Position the model 5 meters in front of the camera
         // Direction is usually negative Z in A-Frame
-        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-5));
+        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-20));
         
         // 3. Keep it on the ground (optional: matches camera Y height or set to 0)
         modelObj.position.y = -1.6; // Assuming eye level is 1.6m
