@@ -5,39 +5,38 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-target-aframe.prod.js"></script>
 
     <style>
       body { margin: 0; overflow: hidden; }
       #ui-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5); color: white; z-index: 9999;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; font-family: sans-serif;
+        background: rgba(0,0,0,0.7); color: white; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        cursor: pointer; font-family: sans-serif; text-align: center;
       }
     </style>
   </head>
 
   <body>
-    <div id="ui-overlay"><h1>Tap to Start Surface AR</h1></div>
+    <div id="ui-overlay">
+      <h1>Surface AR Ready</h1>
+      <p>Tap to enter AR mode, then tap the floor to place models.</p>
+    </div>
 
     <a-scene 
-      mindar-target="autoStart: false" 
-      embedded 
-      color-space="sRGB" 
-      renderer="colorManagement: true, exposure: 1" 
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: false">
+      webxr="optionalFeatures: hit-test;"
+      ar-mode-ui="enabled: true"
+      renderer="colorManagement: true">
       
       <a-assets>
         <a-asset-item id="my-model" src="./model.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse;" raycaster="objects: .ground"></a-camera>
+      <a-camera position="0 1.6 0"></a-camera>
 
-      <a-entity id="ground" class="ground" geometry="primitive: plane; width: 100; height: 100" rotation="-90 0 0" material="transparent: true; opacity: 0"></a-entity>
+      <a-entity id="reticle" geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.08" rotation="-90 0 0" material="color: #00FF00; shader: flat" visible="false"></a-entity>
 
-      <a-entity light="type: ambient; intensity: 1"></a-entity>
+      <a-entity light="type: ambient; intensity: 0.8"></a-entity>
       <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
 
       <a-entity id="container"></a-entity>
@@ -46,26 +45,58 @@
     <script>
       const overlay = document.querySelector('#ui-overlay');
       const sceneEl = document.querySelector('a-scene');
+      const reticle = document.querySelector('#reticle');
       const container = document.querySelector('#container');
 
-      // Start the AR engine when user taps the overlay
+      // 1. Handle Overlay Click
       overlay.addEventListener('click', () => {
         overlay.style.display = 'none';
-        sceneEl.systems['mindar-target'].start(); // Explicitly start MindAR
+        sceneEl.enterAR(); // Forces the browser to request AR mode/Camera
       });
 
-      // Spawning Logic
-      sceneEl.addEventListener('click', (event) => {
-        // Find the intersection point on our invisible ground
-        const touchPoint = event.detail.intersection ? event.detail.intersection.point : null;
-        
-        if (touchPoint) {
-          const newEntity = document.createElement('a-entity');
-          newEntity.setAttribute('gltf-model', '#my-model');
-          newEntity.setAttribute('position', touchPoint);
-          newEntity.setAttribute('scale', '0.5 0.5 0.5'); // Adjust scale as needed
-          
-          container.appendChild(newEntity);
+      // 2. Hit-Test Logic (Finding the floor)
+      sceneEl.addEventListener('enter-vr', () => {
+        const session = sceneEl.xrSession;
+        session.addEventListener('select', () => {
+          if (reticle.getAttribute('visible')) {
+            // Spawn model at reticle position
+            const newEntity = document.createElement('a-entity');
+            newEntity.setAttribute('gltf-model', '#my-model');
+            newEntity.setAttribute('position', reticle.getAttribute('position'));
+            newEntity.setAttribute('scale', '0.5 0.5 0.5');
+            container.appendChild(newEntity);
+          }
+        });
+      });
+
+      // 3. Update reticle position every frame
+      sceneEl.addEventListener('render-target-loaded', () => {
+        const renderer = sceneEl.renderer;
+        renderer.xr.addEventListener('sessionstart', () => {
+          const session = renderer.xr.getSession();
+          session.requestReferenceSpace('viewer').then((space) => {
+            session.requestHitTestSource({ space: space }).then((source) => {
+              sceneEl.hitTestSource = source;
+            });
+          });
+        });
+      });
+
+      sceneEl.addEventListener('tick', () => {
+        const frame = sceneEl.frame;
+        if (!frame || !sceneEl.hitTestSource) return;
+
+        const hitTestResults = frame.getHitTestResults(sceneEl.hitTestSource);
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+          const referenceSpace = sceneEl.renderer.xr.getReferenceSpace();
+          const pose = hit.getPose(referenceSpace);
+
+          reticle.setAttribute('visible', true);
+          reticle.setAttribute('position', pose.transform.position);
+          reticle.object3D.quaternion.copy(pose.transform.orientation);
+        } else {
+          reticle.setAttribute('visible', false);
         }
       });
     </script>
