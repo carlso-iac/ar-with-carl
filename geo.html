@@ -61,8 +61,8 @@
           if (!hasSpawned) {
              status.innerText = `Distance to zone: ${dist.toFixed(1)}m`;
              
-             // Check if user is within 10-25 meters
-             if (dist <= 25 && dist >= 10) {
+             // Check if user is within 10-15 meters
+             if (dist <= 15 && dist >= 10) {
                spawnModelInFront();
              }
           }
@@ -77,9 +77,9 @@
         var direction = new THREE.Vector3();
         camera.getWorldDirection(direction);
 
-        // 2. Position the model 2 meters in front of the camera
+        // 2. Position the model 5 meters in front of the camera
         // Direction is usually negative Z in A-Frame
-        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-2));
+        modelObj.position.addVectors(camera.position, direction.multiplyScalar(-5));
         
         // 3. Keep it on the ground (optional: matches camera Y height or set to 0)
         modelObj.position.y = -1.6; // Assuming eye level is 1.6m
