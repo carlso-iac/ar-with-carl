@@ -1,86 +1,118 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tap to Place AR</title>
-    <style>
-      html, body { margin: 0; overflow: hidden; }
-    </style>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-  </head>
-
-  <body style="margin: 0; overflow: hidden;">
-    <div id="ui" style="position: fixed; bottom: 30px; left: 0; right: 0; text-align: center; z-index: 10; pointer-events: none; font-family: sans-serif;">
-      <div id="status" style="background: rgba(0,0,0,0.65); color: white; display: inline-block; padding: 10px 24px; border-radius: 24px; font-size: 15px;">
-        Tap anywhere to place model
-      </div>
-    </div>
-
-    <a-scene
-      id="scene"
-      arjs="sourceType: webcam; debugUIEnabled: false;"
-      vr-mode-ui="enabled: false"
-      renderer="logarithmicDepthBuffer: true;"
-      antialias="true">
-
-      <a-assets>
-        <a-asset-item id="myModel" src="model.glb"></a-asset-item>
-      </a-assets>
-
-      <a-camera id="cam"></a-camera>
-
-      <a-light type="ambient" intensity="1"></a-light>
-    </a-scene>
-
-    <script>
-      const statusEl = document.querySelector('#status');
-      let spawnCount = 0;
-
-      function spawnModelAt(x, y, z) {
-        const scene = document.querySelector('a-scene');
-        const entity = document.createElement('a-entity');
-        entity.setAttribute('gltf-model', '#myModel');
-        entity.setAttribute('scale', '1 1 1');
-        entity.setAttribute('position', `${x} ${y} ${z}`);
-        scene.appendChild(entity);
-        spawnCount++;
-        statusEl.innerText = `${spawnCount} model${spawnCount > 1 ? 's' : ''} placed — tap to add more`;
-      }
-
-      function handleTap(clientX, clientY) {
-        const cam = document.querySelector('#cam');
-        const camera = cam.getObject3D('camera');
-        if (!camera) return;
-
-        // Convert screen tap to normalized device coordinates
-        const ndcX = (clientX / window.innerWidth) * 2 - 1;
-        const ndcY = -(clientY / window.innerHeight) * 2 + 1;
-
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
-
-        // Ground plane at y = -1.6 (assumes eye/camera height ~1.6m above ground)
-        const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1.6);
-        const target = new THREE.Vector3();
-        const hit = raycaster.ray.intersectPlane(groundPlane, target);
-
-        if (hit) {
-          spawnModelAt(target.x, target.y, target.z);
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Surface Spawner</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
-      }
-
-      // Mobile touch
-      document.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        handleTap(e.touches[0].clientX, e.touches[0].clientY);
-      }, { passive: false });
-
-      // Desktop click (for testing)
-      document.addEventListener('click', (e) => {
-        handleTap(e.clientX, e.clientY);
-      });
     </script>
-  </body>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        let container, scene, camera, renderer, controller, reticle;
+        let spawnedModel = null;
+
+        init();
+        animate();
+
+        function init() {
+            container = document.createElement('div');
+            document.body.appendChild(container);
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            scene.add(light);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // Add the AR Button
+            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+            // The Reticle (the ring that targets the floor)
+            reticle = new THREE.Mesh(
+                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial()
+            );
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
+            // Load your .glb model
+            const loader = new GLTFLoader();
+            loader.load('model.glb', (gltf) => {
+                spawnedModel = gltf.scene;
+            });
+
+            // Controller / Tap Event
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onSelect() {
+            if (reticle.visible && spawnedModel) {
+                const modelClone = spawnedModel.clone();
+                reticle.matrix.decompose(modelClone.position, modelClone.quaternion, modelClone.scale);
+                scene.add(modelClone);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(timestamp, frame) {
+            if (frame) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                // Handle Hit Test
+                if (!this.hitTestSourceRequested) {
+                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                            this.hitTestSource = source;
+                        });
+                    });
+                    this.hitTestSourceRequested = true;
+                }
+
+                if (this.hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+                    if (hitTestResults.length) {
+                        const hit = hitTestResults[0];
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+                    } else {
+                        reticle.visible = false;
+                    }
+                }
+            }
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
 </html>
