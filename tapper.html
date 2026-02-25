@@ -5,21 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AR Surface Spawner</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
-        /* Forces the AR button to be visible on top of everything */
+        body { margin: 0; overflow: hidden; background-color: transparent; }
         #ARButton {
-            position: absolute;
-            bottom: 20px;
-            padding: 12px 24px;
-            border: 1px solid #fff;
-            border-radius: 4px;
             background: rgba(0,0,0,0.8) !important;
-            color: #fff !important;
-            font: normal 13px sans-serif;
-            cursor: pointer;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 999;
+            color: white !important;
+            border: 2px solid white !important;
+            bottom: 30px !important;
         }
     </style>
     <script type="importmap">
@@ -45,50 +36,60 @@
         init();
         animate();
 
-        async function init() {
+        function init() {
             container = document.createElement('div');
             document.body.appendChild(container);
 
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            // Light is essential! Without it, GLB models often look pitch black.
+            // Light is vital for .glb models
             const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
             light.position.set(0.5, 1, 0.25);
             scene.add(light);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                alpha: true,
+                preserveDrawingBuffer: true 
+            });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // Check for WebXR support and add the button
-            const button = ARButton.createButton(renderer, { 
+            // Start AR Button with Hit-Test required
+            const arButton = ARButton.createButton(renderer, { 
                 requiredFeatures: ['hit-test'],
                 optionalFeatures: ['dom-overlay'],
                 domOverlay: { root: document.body }
             });
-            document.body.appendChild(button);
+            document.body.appendChild(arButton);
 
-            // The Reticle (Visual guide for where the model will land)
+            // The Reticle (targeting ring)
             reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 }) // Green ring
+                new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
             );
             reticle.matrixAutoUpdate = false;
             reticle.visible = false;
             scene.add(reticle);
 
-            // Load Model (Ensure model.glb is in the same folder as this HTML)
+            // Load Model with a fallback
             const loader = new GLTFLoader();
             loader.load('model.glb', 
                 (gltf) => {
                     spawnedModel = gltf.scene;
-                    console.log("Model loaded successfully");
+                    // Normalize scale in case the model is massive
+                    spawnedModel.scale.set(0.2, 0.2, 0.2); 
                 },
                 undefined,
-                (error) => console.error("Error loading model:", error)
+                (err) => {
+                    console.error("GLB failed, using fallback cube.");
+                    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                    const mat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+                    spawnedModel = new THREE.Mesh(geo, mat);
+                }
             );
 
             controller = renderer.xr.getController(0);
@@ -101,9 +102,7 @@
         function onSelect() {
             if (reticle.visible && spawnedModel) {
                 const modelClone = spawnedModel.clone();
-                // Match the position/rotation of the reticle
-                modelClone.position.setFromMatrixPosition(reticle.matrix);
-                modelClone.quaternion.setFromRotationMatrix(reticle.matrix);
+                reticle.matrix.decompose(modelClone.position, modelClone.quaternion, modelClone.scale);
                 scene.add(modelClone);
             }
         }
@@ -124,14 +123,10 @@
                 const session = renderer.xr.getSession();
 
                 if (hitTestSourceRequested === false) {
-                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
-                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                    session.requestReferenceSpace('viewer').then((refSpace) => {
+                        session.requestHitTestSource({ space: refSpace }).then((source) => {
                             hitTestSource = source;
                         });
-                    });
-                    session.addEventListener('end', () => {
-                        hitTestSourceRequested = false;
-                        hitTestSource = null;
                     });
                     hitTestSourceRequested = true;
                 }
