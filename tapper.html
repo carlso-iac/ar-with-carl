@@ -2,24 +2,26 @@
 <html>
   <head>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-ar-components@0.5.1/dist/aframe-ar-components.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
     
     <a-scene 
-  webxr="optionalFeatures: hit-test; overlayElement: #overlay;" 
-  ar-hit-test="target: #model-container; type: footprint;"
-  renderer="physicallyCorrectLights: true; exposure: 1; colorManagement: true; alpha: true;"
-  device-orientation-permission-ui="enabled: false">
+      webxr="optionalFeatures: hit-test;" 
+      ar-hit-test="target: #model-container;"
+      renderer="physicallyCorrectLights: true; alpha: true; colorManagement: true;"
+      background="color: #000; transparent: true">
 
-    <a-entity light="type: ambient; intensity: 2.0;"></a-entity>
-    <a-entity light="type: directional; intensity: 1.5;" position="1 1 1"></a-entity>
-      
       <a-assets>
         <a-asset-item id="myModel" src="model.glb"></a-asset-item>
       </a-assets>
 
+      <a-entity light="type: ambient; intensity: 1.5;"></a-entity>
+      <a-entity light="type: directional; intensity: 1.0;" position="1 2 1"></a-entity>
+
       <a-entity id="model-container" position="0 0 0">
+        <a-ring color="cyan" rotation="-90 0 0" radius-inner="0.05" radius-outer="0.1"></a-ring>
+        
         <a-entity 
           id="placed-model"
           gltf-model="#myModel" 
@@ -35,16 +37,19 @@
       const sceneEl = document.querySelector('a-scene');
       const model = document.querySelector('#placed-model');
       
-      // Listen for the 'select' event (screen tap in AR)
       sceneEl.addEventListener('enter-vr', () => {
         if (sceneEl.is('ar-mode')) {
+          // Hide the default black background when entering AR
+          sceneEl.setAttribute('background', 'transparent: true');
+          
           sceneEl.xrSession.addEventListener('select', () => {
-            if (model.getAttribute('visible') === false) {
-              // Get the current position of the hit-test indicator
-              const hitTestPos = document.querySelector('#model-container').getAttribute('position');
-              model.setAttribute('position', hitTestPos);
-              model.setAttribute('visible', 'true');
-            }
+            // Get position of the reticle container
+            const container = document.querySelector('#model-container');
+            const newPos = container.getAttribute('position');
+            
+            // Move and show the model
+            model.setAttribute('position', newPos);
+            model.setAttribute('visible', 'true');
           });
         }
       });
