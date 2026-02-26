@@ -7,9 +7,10 @@
   <body style="margin: 0; overflow: hidden;">
     
     <a-scene 
-      webxr="optionalFeatures: hit-test;" 
-      ar-hit-test="target: #model-container; type: footprint;"
-      renderer="physicallyCorrectLights: true; exposure: 1; colorManagement: true;">
+  webxr="optionalFeatures: hit-test; overlayElement: #overlay;" 
+  ar-hit-test="target: #model-container; type: footprint;"
+  renderer="physicallyCorrectLights: true; exposure: 1; colorManagement: true; alpha: true;"
+  device-orientation-permission-ui="enabled: false">
 
     <a-entity light="type: ambient; intensity: 2.0;"></a-entity>
     <a-entity light="type: directional; intensity: 1.5;" position="1 1 1"></a-entity>
