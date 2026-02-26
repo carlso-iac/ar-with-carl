@@ -1,122 +1,46 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <style>
-      body { margin: 0; overflow: hidden; font-family: sans-serif; }
-      #ui-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.8); color: white; z-index: 9999;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-      }
-      #status-indicator {
-        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.8); color: #fff; padding: 12px 24px;
-        border-radius: 30px; font-size: 14px; z-index: 9998; border: 2px solid #4CC3D9;
-      }
-    </style>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-ar-components@0.5.1/dist/aframe-ar-components.min.js"></script>
   </head>
-
-  <body>
-    <div id="status-indicator">Status: Waiting for Start...</div>
-
-    <div id="ui-overlay" onclick="startAR()">
-      <h1>Surface AR</h1>
-      <p>Tap anywhere to start AR</p>
-    </div>
-
+  <body style="margin: 0; overflow: hidden;">
+    
     <a-scene 
-      webxr="optionalFeatures: hit-test, local-floor;"
-      renderer="colorManagement: true"
-      ar-mode-ui="enabled: false">
+      webxr="optionalFeatures: hit-test;" 
+      ar-hit-test="target: #model-container; type: footprint;">
       
       <a-assets>
-        <a-asset-item id="my-model" src="./model.glb"></a-asset-item>
+        <a-asset-item id="myModel" src="model.glb"></a-asset-item>
       </a-assets>
 
-      <a-entity id="reticle" visible="false">
-        <a-ring radius-inner="0.06" radius-outer="0.1" rotation="-90 0 0" material="color: #4CC3D9; shader: flat; opacity: 0.8"></a-ring>
+      <a-entity id="model-container" position="0 0 0">
+        <a-entity 
+          id="placed-model"
+          gltf-model="#myModel" 
+          scale="0.5 0.5 0.5" 
+          visible="false">
+        </a-entity>
       </a-entity>
 
-      <a-entity light="type: ambient; intensity: 1"></a-entity>
-      <a-entity light="type: directional; intensity: 1" position="1 2 1"></a-entity>
-
-      <a-entity id="container"></a-entity>
       <a-camera position="0 1.6 0"></a-camera>
     </a-scene>
 
     <script>
       const sceneEl = document.querySelector('a-scene');
-      const reticle = document.querySelector('#reticle');
-      const status = document.querySelector('#status-indicator');
-      let hitTestSource = null;
-      let referenceSpace = null;
-
-      function startAR() {
-        document.getElementById('ui-overlay').style.display = 'none';
-        sceneEl.enterAR();
-      }
-
-      // Handle Session Start
+      const model = document.querySelector('#placed-model');
+      
+      // Listen for the 'select' event (screen tap in AR)
       sceneEl.addEventListener('enter-vr', () => {
-        if (!sceneEl.is('ar-mode')) return;
-        
-        status.innerHTML = "AR Active: Move phone slowly...";
-        const session = sceneEl.xrSession;
-
-        session.requestReferenceSpace('viewer').then((viewerSpace) => {
-          session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-            hitTestSource = source;
+        if (sceneEl.is('ar-mode')) {
+          sceneEl.xrSession.addEventListener('select', () => {
+            if (model.getAttribute('visible') === false) {
+              // Get the current position of the hit-test indicator
+              const hitTestPos = document.querySelector('#model-container').getAttribute('position');
+              model.setAttribute('position', hitTestPos);
+              model.setAttribute('visible', 'true');
+            }
           });
-        });
-
-        // Use 'local' instead of 'local-floor' for better table detection
-        session.requestReferenceSpace('local').then((space) => {
-          referenceSpace = space;
-        });
-
-        // CLICK TO SPAWN
-        session.addEventListener('select', () => {
-          if (reticle.getAttribute('visible')) {
-            const newEntity = document.createElement('a-entity');
-            newEntity.setAttribute('gltf-model', '#my-model');
-            
-            // Get current reticle position
-            const pos = reticle.getAttribute('position');
-            newEntity.setAttribute('position', pos);
-            newEntity.setAttribute('scale', '0.5 0.5 0.5');
-            newEntity.setAttribute('rotation', `0 ${Math.random() * 360} 0`);
-            
-            document.querySelector('#container').appendChild(newEntity);
-            status.innerHTML = "✅ Spawned!";
-            setTimeout(() => { status.innerHTML = "Ready to spawn more"; }, 1500);
-          } else {
-            status.innerHTML = "⚠️ Move phone to find surface first";
-          }
-        });
-      });
-
-      // FRAME UPDATE LOOP
-      sceneEl.addEventListener('tick', () => {
-        const frame = sceneEl.frame;
-        if (!frame || !hitTestSource || !referenceSpace) return;
-
-        const hitTestResults = frame.getHitTestResults(hitTestSource);
-        if (hitTestResults.length > 0) {
-          const hit = hitTestResults[0];
-          const pose = hit.getPose(referenceSpace);
-
-          reticle.setAttribute('visible', true);
-          reticle.setAttribute('position', pose.transform.position);
-          reticle.object3D.quaternion.copy(pose.transform.orientation);
-          
-          if(status.innerHTML.includes("Move phone")) {
-            status.innerHTML = "Surface Found! Tap to place.";
-            status.style.color = "#4AFF4A";
-          }
-        } else {
-          reticle.setAttribute('visible', false);
         }
       });
     </script>
