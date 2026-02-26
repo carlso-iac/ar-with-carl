@@ -93,6 +93,14 @@
 <button id="exit-btn" onclick="endAR()">✕ Exit AR</button>
 <canvas id="ar-canvas"></canvas>
 
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 <script type="module">
   const splash   = document.getElementById('splash');
   const noARMsg  = document.getElementById('no-ar-msg');
@@ -136,9 +144,9 @@
     // Load Three.js
     log('Loading 3D engine…');
     try {
-      THREE_mod = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
-      const { GLTFLoader } = await import('https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
-      GLTFLoader_mod = GLTFLoader;
+      THREE_mod = await import('three');
+      const gltfMod = await import('three/addons/loaders/GLTFLoader.js');
+      GLTFLoader_mod = gltfMod.GLTFLoader;
     } catch (e) {
       showNoAR('Failed to load Three.js: ' + e?.message);
       return;
