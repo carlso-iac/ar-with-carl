@@ -8,7 +8,11 @@
     
     <a-scene 
       webxr="optionalFeatures: hit-test;" 
-      ar-hit-test="target: #model-container; type: footprint;">
+      ar-hit-test="target: #model-container; type: footprint;"
+      renderer="physicallyCorrectLights: true; exposure: 1; colorManagement: true;">
+
+    <a-entity light="type: ambient; intensity: 2.0;"></a-entity>
+    <a-entity light="type: directional; intensity: 1.5;" position="1 1 1"></a-entity>
       
       <a-assets>
         <a-asset-item id="myModel" src="model.glb"></a-asset-item>
