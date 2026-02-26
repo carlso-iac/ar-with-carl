@@ -1,58 +1,283 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-  </head>
-  <body style="margin: 0; overflow: hidden;">
-    
-    <a-scene 
-      webxr="optionalFeatures: hit-test;" 
-      ar-hit-test="target: #model-container;"
-      renderer="physicallyCorrectLights: true; alpha: true; colorManagement: true;"
-      background="color: #000; transparent: true">
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Tap to Place</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; font-family: 'Courier New', monospace; overflow: hidden; width: 100vw; height: 100vh; }
 
-      <a-assets>
-        <a-asset-item id="myModel" src="model.glb"></a-asset-item>
-      </a-assets>
+    #splash {
+      position: fixed; inset: 0; z-index: 200; background: #0a0a0f;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+      transition: opacity 0.5s;
+    }
+    #splash.hidden { opacity: 0; pointer-events: none; }
 
-      <a-entity light="type: ambient; intensity: 1.5;"></a-entity>
-      <a-entity light="type: directional; intensity: 1.0;" position="1 2 1"></a-entity>
+    .splash-icon {
+      width: 72px; height: 72px; border: 1.5px solid rgba(255,255,255,0.25);
+      border-radius: 20px; display: flex; align-items: center; justify-content: center;
+    }
+    .splash-title { font-size: 14px; letter-spacing: 0.25em; text-transform: uppercase; color: rgba(255,255,255,0.9); }
+    .splash-sub { font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.08em; text-align: center; max-width: 210px; line-height: 1.75; }
 
-      <a-entity id="model-container" position="0 0 0">
-        <a-ring color="cyan" rotation="-90 0 0" radius-inner="0.05" radius-outer="0.1"></a-ring>
-        
-        <a-entity 
-          id="placed-model"
-          gltf-model="#myModel" 
-          scale="0.5 0.5 0.5" 
-          visible="false">
-        </a-entity>
-      </a-entity>
+    #start-btn {
+      background: transparent; border: 1px solid rgba(255,255,255,0.35); color: rgba(255,255,255,0.8);
+      font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      padding: 14px 36px; border-radius: 40px; cursor: pointer; transition: background 0.2s; margin-top: 8px;
+    }
+    #start-btn:active { background: rgba(255,255,255,0.1); }
 
-      <a-camera position="0 1.6 0"></a-camera>
-    </a-scene>
+    #no-ar-msg {
+      display: none; position: fixed; inset: 0; z-index: 300; background: #0a0a0f;
+      flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 40px; text-align: center;
+    }
+    #no-ar-msg h2 { color: rgba(255,255,255,0.8); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; font-weight: normal; }
+    #no-ar-msg p { color: rgba(255,255,255,0.4); font-size: 11px; letter-spacing: 0.08em; line-height: 1.9; }
 
-    <script>
-      const sceneEl = document.querySelector('a-scene');
-      const model = document.querySelector('#placed-model');
-      
-      sceneEl.addEventListener('enter-vr', () => {
-        if (sceneEl.is('ar-mode')) {
-          // Hide the default black background when entering AR
-          sceneEl.setAttribute('background', 'transparent: true');
-          
-          sceneEl.xrSession.addEventListener('select', () => {
-            // Get position of the reticle container
-            const container = document.querySelector('#model-container');
-            const newPos = container.getAttribute('position');
-            
-            // Move and show the model
-            model.setAttribute('position', newPos);
-            model.setAttribute('visible', 'true');
-          });
-        }
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 20px 20px; display: none; justify-content: space-between; align-items: flex-start; pointer-events: none;
+    }
+    #status, #count {
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.65); background: rgba(0,0,0,0.45);
+      padding: 8px 14px; border-radius: 20px; backdrop-filter: blur(10px);
+    }
+
+    #exit-btn {
+      display: none; position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%);
+      z-index: 100; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.7); font-family: 'Courier New', monospace; font-size: 11px;
+      letter-spacing: 0.15em; text-transform: uppercase; padding: 13px 28px; border-radius: 40px;
+      cursor: pointer; backdrop-filter: blur(10px);
+    }
+
+    .tap-ripple {
+      position: fixed; pointer-events: none; z-index: 150;
+      width: 48px; height: 48px; border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,0.9);
+      transform: translate(-50%, -50%) scale(0);
+      animation: ripple 0.45s ease-out forwards;
+    }
+    @keyframes ripple { to { transform: translate(-50%, -50%) scale(2.5); opacity: 0; } }
+
+    #ar-canvas { display: none; position: fixed; inset: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="splash-icon">
+    <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+      <path d="M15 3L27 9V21L15 27L3 21V9L15 3Z" stroke="white" stroke-width="1.5" fill="none" opacity="0.8"/>
+      <circle cx="15" cy="15" r="3" fill="white" opacity="0.5"/>
+    </svg>
+  </div>
+  <span class="splash-title">AR Placer</span>
+  <span class="splash-sub">Point your camera at a flat surface, then tap to spawn your 3D model</span>
+  <button id="start-btn" onclick="startAR()">Launch AR</button>
+</div>
+
+<div id="no-ar-msg">
+  <h2>AR Not Supported</h2>
+  <p>WebXR AR requires an ARCore-supported Android device with Chrome, or Safari on iOS 15+ with Motion & Orientation access.<br><br>Serve over HTTPS and grant camera permissions.</p>
+</div>
+
+<div id="hud">
+  <span id="status">Searching for surface…</span>
+  <span id="count">0 placed</span>
+</div>
+
+<button id="exit-btn" onclick="endAR()">✕ Exit AR</button>
+<canvas id="ar-canvas"></canvas>
+
+<script type="module">
+  const splash   = document.getElementById('splash');
+  const noARMsg  = document.getElementById('no-ar-msg');
+  const hud      = document.getElementById('hud');
+  const statusEl = document.getElementById('status');
+  const countEl  = document.getElementById('count');
+  const exitBtn  = document.getElementById('exit-btn');
+  const arCanvas = document.getElementById('ar-canvas');
+
+  let xrSession = null, hitTestSource = null, hitTestSourceRequested = false;
+  let threeRenderer, scene, camera, reticleObj, reticleMatrix = null;
+  let loadedGLTF = null, modelCount = 0, surfaceFound = false;
+  let THREE_mod, GLTFLoader_mod;
+
+  window.startAR = async function () {
+    splash.classList.add('hidden');
+
+    if (!navigator.xr) { showNoAR(); return; }
+    const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+    if (!ok) { showNoAR(); return; }
+
+    // Load Three.js
+    try {
+      THREE_mod = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+      const { GLTFLoader } = await import('https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
+      GLTFLoader_mod = GLTFLoader;
+    } catch (e) { showNoAR('Failed to load 3D engine.'); return; }
+
+    // Start AR session
+    try {
+      xrSession = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
       });
-    </script>
-  </body>
+    } catch (e) { showNoAR('Could not start AR. Check camera permissions.'); return; }
+
+    // Init Three renderer
+    arCanvas.style.display = 'block';
+    threeRenderer = new THREE_mod.WebGLRenderer({ canvas: arCanvas, alpha: true, antialias: true });
+    threeRenderer.setPixelRatio(window.devicePixelRatio);
+    threeRenderer.setSize(window.innerWidth, window.innerHeight);
+    threeRenderer.xr.enabled = true;
+
+    scene = new THREE_mod.Scene();
+    camera = new THREE_mod.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+    // Lighting
+    scene.add(new THREE_mod.AmbientLight(0xffffff, 1.5));
+    const dir = new THREE_mod.DirectionalLight(0xffffff, 2);
+    dir.position.set(2, 4, 3);
+    scene.add(dir);
+
+    // Reticle ring
+    const rGeo = new THREE_mod.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
+    const rMat = new THREE_mod.MeshBasicMaterial({ color: 0xffffff, side: THREE_mod.DoubleSide, opacity: 0.85, transparent: true });
+    reticleObj = new THREE_mod.Mesh(rGeo, rMat);
+    reticleObj.matrixAutoUpdate = false;
+    reticleObj.visible = false;
+    scene.add(reticleObj);
+
+    // Preload model
+    const loader = new GLTFLoader_mod();
+    loader.load('model.glb',
+      (gltf) => { loadedGLTF = gltf.scene; },
+      undefined,
+      () => { loadedGLTF = 'fallback'; } // fallback to box
+    );
+
+    threeRenderer.xr.setReferenceSpaceType('local');
+    await threeRenderer.xr.setSession(xrSession);
+
+    xrSession.addEventListener('end', onSessionEnd);
+    xrSession.addEventListener('select', onSelect);
+    threeRenderer.setAnimationLoop(onFrame);
+
+    hud.style.display = 'flex';
+    exitBtn.style.display = 'block';
+  };
+
+  function onFrame(time, frame) {
+    if (!frame) return;
+    const refSpace = threeRenderer.xr.getReferenceSpace();
+
+    if (!hitTestSourceRequested) {
+      xrSession.requestReferenceSpace('viewer').then(viewerSpace => {
+        xrSession.requestHitTestSource({ space: viewerSpace }).then(src => { hitTestSource = src; });
+      });
+      hitTestSourceRequested = true;
+    }
+
+    if (hitTestSource) {
+      const hits = frame.getHitTestResults(hitTestSource);
+      if (hits.length > 0) {
+        const pose = hits[0].getPose(refSpace);
+        if (pose) {
+          reticleObj.visible = true;
+          reticleObj.matrix.fromArray(pose.transform.matrix);
+          reticleMatrix = pose.transform.matrix.slice();
+          if (!surfaceFound) {
+            surfaceFound = true;
+            statusEl.textContent = 'Surface found — tap to place';
+          }
+        }
+      } else {
+        reticleObj.visible = false;
+      }
+    }
+
+    threeRenderer.render(scene, camera);
+  }
+
+  function onSelect(evt) {
+    if (!reticleMatrix) return;
+
+    // Ripple at touch point
+    const touch = evt.inputSource?.gamepad ? null : null;
+    spawnRipple(window.innerWidth / 2, window.innerHeight / 2);
+
+    const T = THREE_mod;
+    let obj;
+
+    if (loadedGLTF && loadedGLTF !== 'fallback') {
+      obj = loadedGLTF.clone(true);
+      // Auto-scale to ~0.25m
+      const box = new T.Box3().setFromObject(obj);
+      const size = box.getSize(new T.Vector3());
+      const maxD = Math.max(size.x, size.y, size.z);
+      if (maxD > 0) obj.scale.setScalar(0.25 / maxD);
+    } else {
+      // Fallback: glowing icosahedron
+      const geo = new T.IcosahedronGeometry(0.08, 1);
+      const mat = new T.MeshStandardMaterial({ color: 0x66aaff, metalness: 0.3, roughness: 0.4 });
+      obj = new T.Mesh(geo, mat);
+    }
+
+    const mat4 = new T.Matrix4().fromArray(reticleMatrix);
+    const pos = new T.Vector3(), quat = new T.Quaternion(), sc = new T.Vector3();
+    mat4.decompose(pos, quat, sc);
+    obj.position.copy(pos);
+    obj.quaternion.copy(quat);
+    scene.add(obj);
+
+    modelCount++;
+    countEl.textContent = `${modelCount} placed`;
+    statusEl.textContent = 'Tap to place more';
+
+    // Pop-in animation
+    const finalScale = obj.scale.clone();
+    obj.scale.set(0, 0, 0);
+    const t0 = performance.now();
+    (function popAnim(now) {
+      const p = Math.min((now - t0) / 380, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      obj.scale.copy(finalScale).multiplyScalar(e);
+      if (p < 1) requestAnimationFrame(popAnim);
+    })(t0);
+  }
+
+  function spawnRipple(x, y) {
+    const el = document.createElement('div');
+    el.className = 'tap-ripple';
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 500);
+  }
+
+  function onSessionEnd() {
+    hitTestSource = null; hitTestSourceRequested = false; surfaceFound = false;
+    reticleMatrix = null; reticleObj = null; modelCount = 0; xrSession = null;
+    threeRenderer?.setAnimationLoop(null);
+    hud.style.display = 'none';
+    exitBtn.style.display = 'none';
+    arCanvas.style.display = 'none';
+    splash.classList.remove('hidden');
+  }
+
+  window.endAR = function () { xrSession?.end(); };
+
+  function showNoAR(msg) {
+    splash.classList.add('hidden');
+    if (msg) noARMsg.querySelector('p').textContent = msg;
+    noARMsg.style.display = 'flex';
+  }
+</script>
+</body>
 </html>
