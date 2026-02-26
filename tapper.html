@@ -124,11 +124,25 @@
     // Start AR session
     try {
       xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
+        requiredFeatures: [],
+        optionalFeatures: ['hit-test', 'dom-overlay'],
         domOverlay: { root: document.body }
       });
-    } catch (e) { showNoAR('Could not start AR. Check camera permissions.'); return; }
+    } catch (e) {
+      console.error('XR session error:', e);
+      showNoAR(`AR session failed: ${e?.message || e}. Try reloading and granting camera permission.`);
+      return;
+    }
+
+    // Check if hit-test was actually granted
+    const enabledFeatures = xrSession.enabledFeatures ?? [];
+    const hasHitTest = enabledFeatures.includes('hit-test');
+    if (!hasHitTest) {
+      // Some devices support immersive-ar but not hit-test.
+      // We'll still run but show a warning — tapping will place at a fixed distance.
+      console.warn('hit-test not available, using fallback placement');
+      statusEl.textContent = 'No surface detection — tap to place';
+    }
 
     // Init Three renderer
     arCanvas.style.display = 'block';
@@ -206,32 +220,37 @@
   }
 
   function onSelect(evt) {
-    if (!reticleMatrix) return;
-
-    // Ripple at touch point
-    const touch = evt.inputSource?.gamepad ? null : null;
     spawnRipple(window.innerWidth / 2, window.innerHeight / 2);
 
     const T = THREE_mod;
-    let obj;
+    let pos = new T.Vector3(), quat = new T.Quaternion();
 
+    if (reticleMatrix) {
+      // Hit-test surface placement
+      const mat4 = new T.Matrix4().fromArray(reticleMatrix);
+      const sc = new T.Vector3();
+      mat4.decompose(pos, quat, sc);
+    } else {
+      // Fallback: place 1.2m in front of camera
+      const camDir = new T.Vector3();
+      camera.getWorldPosition(pos);
+      camera.getWorldDirection(camDir);
+      pos.add(camDir.multiplyScalar(1.2));
+    }
+
+    let obj;
     if (loadedGLTF && loadedGLTF !== 'fallback') {
       obj = loadedGLTF.clone(true);
-      // Auto-scale to ~0.25m
       const box = new T.Box3().setFromObject(obj);
       const size = box.getSize(new T.Vector3());
       const maxD = Math.max(size.x, size.y, size.z);
       if (maxD > 0) obj.scale.setScalar(0.25 / maxD);
     } else {
-      // Fallback: glowing icosahedron
       const geo = new T.IcosahedronGeometry(0.08, 1);
       const mat = new T.MeshStandardMaterial({ color: 0x66aaff, metalness: 0.3, roughness: 0.4 });
       obj = new T.Mesh(geo, mat);
     }
 
-    const mat4 = new T.Matrix4().fromArray(reticleMatrix);
-    const pos = new T.Vector3(), quat = new T.Quaternion(), sc = new T.Vector3();
-    mat4.decompose(pos, quat, sc);
     obj.position.copy(pos);
     obj.quaternion.copy(quat);
     scene.add(obj);
@@ -275,7 +294,10 @@
 
   function showNoAR(msg) {
     splash.classList.add('hidden');
-    if (msg) noARMsg.querySelector('p').textContent = msg;
+    if (msg) {
+      noARMsg.querySelector('p').textContent = msg;
+      console.error('AR blocked:', msg);
+    }
     noARMsg.style.display = 'flex';
   }
 </script>
