@@ -110,18 +110,43 @@
   window.startAR = async function () {
     splash.classList.add('hidden');
 
-    if (!navigator.xr) { showNoAR(); return; }
-    const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-    if (!ok) { showNoAR(); return; }
+    const log = (msg) => {
+      console.log('[AR DEBUG]', msg);
+      statusEl.textContent = msg;
+    };
+
+    hud.style.display = 'flex';
+    statusEl.textContent = 'Checking WebXR…';
+
+    if (!navigator.xr) {
+      showNoAR('navigator.xr is undefined — WebXR not available in this browser/context.');
+      return;
+    }
+    log('navigator.xr found ✓');
+
+    const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(e => {
+      showNoAR('isSessionSupported threw: ' + e?.message); return false;
+    });
+    if (!ok) {
+      showNoAR('isSessionSupported("immersive-ar") returned FALSE — device/browser does not support AR mode.');
+      return;
+    }
+    log('immersive-ar supported ✓');
 
     // Load Three.js
+    log('Loading 3D engine…');
     try {
       THREE_mod = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
       const { GLTFLoader } = await import('https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
       GLTFLoader_mod = GLTFLoader;
-    } catch (e) { showNoAR('Failed to load 3D engine.'); return; }
+    } catch (e) {
+      showNoAR('Failed to load Three.js: ' + e?.message);
+      return;
+    }
+    log('3D engine loaded ✓');
 
     // Start AR session
+    log('Requesting AR session…');
     try {
       xrSession = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: [],
@@ -130,16 +155,15 @@
       });
     } catch (e) {
       console.error('XR session error:', e);
-      showNoAR(`AR session failed: ${e?.message || e}. Try reloading and granting camera permission.`);
+      showNoAR('requestSession failed — ' + (e?.message || String(e)));
       return;
     }
+    log('AR session started ✓');
 
     // Check if hit-test was actually granted
     const enabledFeatures = xrSession.enabledFeatures ?? [];
     const hasHitTest = enabledFeatures.includes('hit-test');
     if (!hasHitTest) {
-      // Some devices support immersive-ar but not hit-test.
-      // We'll still run but show a warning — tapping will place at a fixed distance.
       console.warn('hit-test not available, using fallback placement');
       statusEl.textContent = 'No surface detection — tap to place';
     }
